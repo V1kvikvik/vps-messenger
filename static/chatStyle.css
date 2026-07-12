@@ -1,0 +1,87 @@
+body {
+    display: flex;
+    height: 100vh;
+    margin: 0;
+    background-color: #212121;
+    color: #ffffff
+}
+button {
+    background-color: #807f7f;
+    color: white;
+}
+
+#currentChat {
+    width: 70%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+#messagesWindow {
+    flex: 1;
+    display: flex; 
+    flex-direction: column;
+    justify-content: flex-end;
+    overflow-y: auto;
+}
+#chatsList {
+    width: 30%;
+    height: 100%;
+    border-right: 1px solid #3a3a3a;
+    background-color: #2b2b2b;
+}
+#bottomPanel {
+    height: 40px;
+    display: flex;
+    flex-direction: row;
+}
+#messageInput {
+    flex: 1;
+    height: 100%;
+    background-color: #3f3f3f;
+    color: #ffffff;
+}
+#messageText {
+    background-color: #3f3f3f;
+    color: #ffffff;
+    border: none;
+    outline: none;
+}
+#messageText {
+    flex: 1;
+    height: 100%;
+    width: 99.5%;
+    background-color: #21212124;
+}
+#sendButton {
+    height: 115%;
+}
+.chatRow {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    margin: 10px;
+    gap: 8px;
+}
+.chat {
+    flex: 1;
+}
+.message {
+    background-color: #2b5278;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 12px;
+    margin: 4px 8px;
+    width: fit-content;
+    max-width: 60%;
+    align-self: flex-end;
+}
+.IncomingMessage {
+    background-color: #5e5f5f;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 12px;
+    margin: 4px 8px;
+    width: fit-content;
+    max-width: 60%;
+    align-self: flex-start;
+}

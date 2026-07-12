@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login/Register</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="app.js" defer></script>
+</head>
+<body>
+    <div class="FormHolder">
+        <h1 >Register</h1>
+        <form class="Form">
+            <div class="inputHolder">
+                <label for="username"></label>
+                <input 
+                type="text" 
+                id="username" 
+                name="username" 
+                autocomplete="username" 
+                placeholder="Enter username" 
+                required>
+            </div>
+            <div class="inputHolder">
+                <input 
+                type="password" 
+                id="password" 
+                name="password" 
+                autocomplete="new-password" 
+                placeholder="Enter password" 
+                required>
+            </div>
+            <button type="button" class="FormButton" id="RegisterButton">Register</button>
+            <button type="button" class="FormButton" id="LoginButton">Login</button>
+        </form>
+    </div>
+</body>
+</html>

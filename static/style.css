@@ -1,0 +1,30 @@
+.FormHolder {
+    border-style: solid;
+    width: 40%;
+    padding: 60px 40px;
+    text-align: center;
+    padding-top: 0px;
+   
+}
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+}
+.inputHolder {
+    width: 90%;
+    text-align: center;
+    margin: 4px;
+}
+.Form {
+    align-items: center;
+    justify-content: center;
+    display: flex;
+    flex-direction: column;
+}
+.FormButton {
+    width: 15%;
+    margin: 2px;
+}
