@@ -3,7 +3,7 @@ function Send(){
     sendButton.addEventListener('click', (event)=>{
         const value = document.querySelector('#messageText').value
         document.querySelector('#messageText').value = ''
-        ws.send(JSON.stringify({chat_id: parseInt(currentChatId), message: value}))
+        ws.send(JSON.stringify({chat_id: parseInt(currentChat['id']), message: value}))
     })
     
 }
@@ -16,12 +16,11 @@ async function ClickRegister(){
         }
         if (targetInstance.id === 'chatCreator'){
             const chatName = prompt("Введи название чата")
-            const isGroup = confirm("Это групповой чат?")
             if(chatName){
                 await fetch('/chats', {
                     method: 'POST',
                     headers: {'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'},
-                    body: JSON.stringify({'name': chatName, 'isgroup': isGroup})
+                    body: JSON.stringify({'name': chatName})
                 })
                 chatsList.innerHTML = ''
                 AvailableChats()
@@ -29,7 +28,14 @@ async function ClickRegister(){
         }
         if (targetInstance.dataset.chatId){
             WriteHistory(targetInstance.dataset.chatId)
-            currentChatId = targetInstance.dataset.chatId
+            if (previousChat['object']) {
+                previousChat['object'].className = 'chat'
+            }
+            currentChat['id'] = targetInstance.dataset.chatId
+            currentChat['object'] = targetInstance
+            targetInstance.className = 'chosenChat'
+            previousChat['id'] = currentChat['id']
+            previousChat['object'] = currentChat['object']
         }
         if (targetInstance.dataset.addChatId){
             const username = prompt("Enter the username: ")
@@ -54,6 +60,18 @@ async function ClickRegister(){
         }
         
     })
+}
+
+async function GetChatMembers(currentChatId) {
+    async function GetMembers() {
+        membersList = await fetch(`/members?chat_id=${currentChatId}`, {
+            method: 'GET',
+            headers: {'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'},
+        })
+        return await membersList.json()
+    }
+    memberList = await GetMembers()
+    console.log(memberList)
 }
 
 async function WriteHistory(currentChatId) {
@@ -129,7 +147,8 @@ async function AvailableChats() {
         chatsList.appendChild(chatRow)
     }
 }
-var currentChatId = 0
+var currentChat = {'id':0, 'object':null}
+var previousChat = {'id':0, 'object':null}
 const token = localStorage.getItem('token')
 if(!token){
     window.location.href = '/index.html'

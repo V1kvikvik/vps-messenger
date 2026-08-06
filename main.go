@@ -21,6 +21,15 @@ import (
 	"golang.org/x/time/rate"
 )
 
+type GetChatMembersRequest struct {
+	Chat_Id int `json:"chat_id"`
+}
+
+type ChatMember struct {
+	Username string `json:"username"`
+	Role     string `json:"role"`
+}
+
 type ClientConn struct {
 	conn     *websocket.Conn
 	username string
@@ -61,8 +70,7 @@ type MessageTemplate struct {
 }
 
 type GroupChatCreationRequest struct {
-	Name    string `json:"name"`
-	IsGroup bool   `json:"isgroup"`
+	Name string `json:"name"`
 }
 
 type LoginRequest struct {
@@ -482,7 +490,7 @@ func main() {
 			return
 		}
 		defer tx.Rollback(context.Background())
-		dbInserterr := tx.QueryRow(context.Background(), "INSERT INTO chats (name, is_group) VALUES ($1, $2) RETURNING id", req.Name, req.IsGroup).Scan(&Chatid)
+		dbInserterr := tx.QueryRow(context.Background(), "INSERT INTO chats (name) VALUES ($1) RETURNING id", req.Name).Scan(&Chatid)
 		if dbInserterr != nil {
 			fmt.Println("Something went wrong when parsing to DB: ", dbInserterr)
 			w.WriteHeader(http.StatusConflict)
@@ -727,6 +735,65 @@ func main() {
 		}
 		jsonMsg, _ := json.Marshal(WsMessage{Type: "chat_update"})
 		mainHub.SendToEveryone(1, jsonMsg)
+	})))
+
+	http.HandleFunc("/members", rateLimitMiddleware(3, 10, recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		chatId, intErr := strconv.Atoi(r.URL.Query().Get("chat_id"))
+		if intErr != nil {
+			log.Println("Error while getting chat id: ", intErr)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		var claims jwt.MapClaims
+		token := r.Header.Get("Authorization")
+		token = strings.TrimPrefix(token, "Bearer ")
+		_, tokerr := jwt.ParseWithClaims(token, &claims, func(t *jwt.Token) (any, error) {
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+			}
+			return secretKey, nil
+		}, jwt.WithValidMethods([]string{"HS256"}))
+		if tokerr != nil {
+			log.Println("Something went during the token check: ", tokerr)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		username, ok := claims["username"].(string)
+		if !ok || username == "" {
+			log.Println("Token missing valid username claim")
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		member, memberErr := userIsInChat(r.Context(), username, chatId)
+		if memberErr != nil {
+			log.Println("Something went during the user check: ", memberErr)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		if !member {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		rows, queryErr := dbpool.Query(context.Background(), "SELECT u.username, cm.role FROM chat_members cm JOIN users u ON u.id = cm.user_id WHERE cm.chat_id = $1", chatId)
+		if queryErr != nil {
+			log.Println("Something went wrong while getting chat members")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		var memberArray []ChatMember
+		for rows.Next() {
+			var m ChatMember
+			if err := rows.Scan(&m.Username, &m.Role); err != nil {
+				log.Println("Something went wrong when scanning chat member: ", err)
+				continue
+			}
+			memberArray = append(memberArray, m)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(memberArray)
+
 	})))
 
 	http.Handle("/", http.FileServer(http.Dir("static")))
