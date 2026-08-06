@@ -136,7 +136,7 @@ if(!token){
 }
 const payload = JSON.parse(atob(token.split('.')[1]))
 const myUsername = payload.username
-const ws = new WebSocket('ws://localhost:8080/ws')
+const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws')
 const messageWindow = document.querySelector('#messagesWindow')
 const chatsList = document.querySelector('#chatsList')
 ws.onopen = () => ws.send(token)
