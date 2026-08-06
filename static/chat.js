@@ -72,7 +72,7 @@ async function GetChatMembers(currentChatId) {
         return await membersList.json()
     }
     const memberList = await GetMembers()
-    const membersPanel = document.querySelector('#membersPanel')
+    const membersPanel = document.querySelector('#userList')
     membersPanel.innerHTML = ''
     for (const m of memberList) {
         const row = document.createElement('div')

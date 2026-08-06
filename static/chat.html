@@ -3,30 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chats</title>
+    <title>unwiredtalk</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="chatStyle.css">
     <script src="chat.js" defer></script>
 </head>
 <body>
     <div id="chatsList">
-        
+
     </div>
     <div id="currentChat">
         <div id="who">
-
+            <span id="whoLabel">Select a chat</span>
         </div>
         <div id="messagesWindow">
 
         </div>
         <div id="bottomPanel">
             <div id="messageInput">
-                <input type="text" id="messageText" placeholder="Enter message">
+                <input type="text" id="messageText" placeholder="Enter message" aria-label="Message">
             </div>
             <div id="messageSend">
                 <button id="sendButton">Send</button>
             </div>
         </div>
     </div>
-    <div id="userList">s</div>
+    <div id="userList">
+        <div id="userListLabel">Members</div>
+    </div>
+
+    <script>
+        // Decorative only — mirrors the selected chat's name into #who.
+        // Does not touch chat.js state or logic; safe to remove.
+        (function () {
+            var whoLabel = document.getElementById('whoLabel');
+            var chatsList = document.getElementById('chatsList');
+            if (!whoLabel || !chatsList) return;
+
+            var observer = new MutationObserver(function () {
+                var chosen = chatsList.querySelector('.chosenChat');
+                whoLabel.textContent = chosen ? chosen.textContent : 'Select a chat';
+            });
+            observer.observe(chatsList, { attributes: true, attributeFilter: ['class'], subtree: true });
+        })();
+    </script>
 </body>
 </html>

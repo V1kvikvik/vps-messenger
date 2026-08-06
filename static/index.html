@@ -3,36 +3,107 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login/Register</title>
+    <title>unwiredtalk</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <script src="app.js" defer></script>
 </head>
 <body>
-    <div class="FormHolder">
-        <h1 >Register</h1>
-        <form class="Form">
-            <div class="inputHolder">
-                <label for="username"></label>
-                <input 
-                type="text" 
-                id="username" 
-                name="username" 
-                autocomplete="username" 
-                placeholder="Enter username" 
-                required>
+    <div class="Stage">
+
+        <aside class="SignalPanel" aria-hidden="true">
+            <div class="SignalMark">uw//</div>
+            <div class="SignalLog" id="signalLog"></div>
+        </aside>
+
+        <main class="AuthPanel">
+            <div class="FormHolder">
+                <header class="Brand">
+                    <h1 class="Wordmark">unwired<span>talk</span></h1>
+                    <p class="Tagline">Built by one person, for a few people who trust each other.</p>
+                </header>
+
+                <form class="Form" novalidate>
+                    <div class="inputHolder">
+                        <label for="username" class="fieldLabel">Username</label>
+                        <input
+                            type="text"
+                            id="username"
+                            name="username"
+                            autocomplete="username"
+                            placeholder="e.g. gosha"
+                            required>
+                    </div>
+                    <div class="inputHolder">
+                        <label for="password" class="fieldLabel">Password</label>
+                        <input
+                            type="password"
+                            id="password"
+                            name="password"
+                            autocomplete="current-password"
+                            placeholder="8+ characters"
+                            required>
+                    </div>
+
+                    <div class="ButtonRow">
+                        <button type="button" class="FormButton FormButtonPrimary" id="LoginButton">Log in</button>
+                        <button type="button" class="FormButton FormButtonGhost" id="RegisterButton">Create account</button>
+                    </div>
+                </form>
+
             </div>
-            <div class="inputHolder">
-                <input 
-                type="password" 
-                id="password" 
-                name="password" 
-                autocomplete="new-password" 
-                placeholder="Enter password" 
-                required>
-            </div>
-            <button type="button" class="FormButton" id="RegisterButton">Register</button>
-            <button type="button" class="FormButton" id="LoginButton">Login</button>
-        </form>
+        </main>
     </div>
+
+    <script>
+
+        (function () {
+            var lines = [
+                "> establishing link...",
+                "> peer found: trusted",
+                "> channel open",
+            ];
+            var el = document.getElementById('signalLog');
+            if (!el) return;
+
+            var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (reduceMotion) {
+                el.textContent = lines.join('\n');
+                return;
+            }
+
+            var lineIndex = 0, charIndex = 0, current = '';
+            var rendered = document.createElement('div');
+            el.appendChild(rendered);
+
+            function tick() {
+                if (lineIndex >= lines.length) {
+                    setTimeout(function () {
+                        rendered.textContent = '';
+                        lineIndex = 0;
+                        charIndex = 0;
+                        current = '';
+                        tick();
+                    }, 1800);
+                    return;
+                }
+                var line = lines[lineIndex];
+                if (charIndex <= line.length) {
+                    current = line.slice(0, charIndex);
+                    rendered.textContent = lines.slice(0, lineIndex).join('\n') +
+                        (lineIndex > 0 ? '\n' : '') + current;
+                    charIndex++;
+                    setTimeout(tick, 28);
+                } else {
+                    lineIndex++;
+                    charIndex = 0;
+                    setTimeout(tick, 220);
+                }
+            }
+            tick();
+        })();
+    </script>
 </body>
 </html>

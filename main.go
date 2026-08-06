@@ -385,7 +385,7 @@ func main() {
 			mainHub.Broadcast(typ, jsonMsg, req.ChatId)
 		}
 	}))
-	http.HandleFunc("/register", rateLimitMiddleware(1, 3, recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/register", rateLimitMiddleware(2, 10, recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		var req RegisterRequest
 		err := json.NewDecoder(r.Body).Decode(&req)
 		if err != nil {
@@ -415,7 +415,7 @@ func main() {
 		}
 		w.WriteHeader(http.StatusCreated)
 	})))
-	http.HandleFunc("/login", rateLimitMiddleware(1, 5, recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/login", rateLimitMiddleware(3, 15, recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		var req LoginRequest
 		err := json.NewDecoder(r.Body).Decode(&req)
 		if err != nil {
