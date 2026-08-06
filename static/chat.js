@@ -68,10 +68,17 @@ async function WriteHistory(currentChatId) {
     messageWindow.innerHTML = ''
     for(const messag of messagesHistory){
         const newMessage = document.createElement('div')
-        newMessage.textContent = messag.content
+        const newMessageText = document.createElement('div')
+        newMessageText.textContent = messag.content
         if (messag.sender != myUsername){
             newMessage.className = 'IncomingMessage'
+            const messageSource = document.createElement('div')
+            messageSource.textContent = messag.sender
+            messageSource.className = 'senderName'
+            newMessage.appendChild(messageSource)
+            newMessage.appendChild(newMessageText)
         } else {
+            newMessage.appendChild(newMessageText)
             newMessage.className = 'message'
         }
         console.log(messag)
@@ -108,18 +115,17 @@ async function AvailableChats() {
         
         chatRow.className = 'chatRow'
         chatRow.appendChild(newChat)
+        const addUserBtn = document.createElement('button')
         if (chat.role == "owner" || chat.role == "admin"){
-            const addUserBtn = document.createElement('button')
             addUserBtn.textContent = 'AddUser'
             addUserBtn.dataset.addChatId = chat.chat_id
+            chatRow.appendChild(addUserBtn)
         }
         const RemoveUserBtn = document.createElement('button')
         RemoveUserBtn.textContent = 'RemoveUser'
         RemoveUserBtn.dataset.RemoveChatId = chat.chat_id
-        chatRow.appendChild(addUserBtn)
+        
         chatRow.appendChild(RemoveUserBtn)
-            
-
         chatsList.appendChild(chatRow)
     }
 }
@@ -136,10 +142,22 @@ const chatsList = document.querySelector('#chatsList')
 ws.onopen = () => ws.send(token)
 ws.addEventListener("message", (event) => {
     const data = JSON.parse(event.data)
+    console.log(data)
     if(data.type == "message"){
         const newMessage = document.createElement('div')
-        newMessage.textContent = data.content
-        newMessage.className = data.sender != myUsername ? 'IncomingMessage' : 'message'
+        const newMessageText = document.createElement('div')
+        newMessageText.textContent = data.content
+        if(data.sender != myUsername){
+            newMessage.className = 'IncomingMessage'
+            const messageSource = document.createElement('div')
+            messageSource.textContent = data.sender
+            messageSource.className = 'senderName'
+            newMessage.appendChild(messageSource)
+            newMessage.appendChild(newMessageText)
+        } else {
+            newMessage.className = 'message'
+            newMessage.appendChild(newMessageText)
+        }
         messageWindow.appendChild(newMessage)
     } else if(data.type == "chat_update"){
         chatsList.innerHTML = ''

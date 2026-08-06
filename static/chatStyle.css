@@ -5,6 +5,12 @@ body {
     background-color: #212121;
     color: #ffffff
 }
+.senderName {
+    font-size: 0.75em;
+    color: #888;
+    margin-bottom: 2px;
+    font-weight: 600;
+}
 button {
     background-color: #807f7f;
     color: white;
