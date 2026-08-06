@@ -24,6 +24,7 @@ async function ClickRegister(){
                 })
                 chatsList.innerHTML = ''
                 AvailableChats()
+                GetChatMembers(targetInstance.dataset.chatId)
             }
         }
         if (targetInstance.dataset.chatId){
