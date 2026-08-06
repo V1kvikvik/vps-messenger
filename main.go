@@ -346,6 +346,7 @@ func main() {
 				continue
 			}
 			req.Message = strings.TrimSpace(req.Message)
+			log.Println("DEBUG:", "message=", req.Message, "len=", len(req.Message), "chatId=", req.ChatId)
 			if req.Message == "" || len(req.Message) > 4000 || req.ChatId <= 0 {
 				errorMsg, err := json.Marshal(WsMessage{Type: "error", Content: "message too long"})
 				if err != nil {
