@@ -17,7 +17,7 @@ button {
 }
 
 #currentChat {
-    width: 70%;
+    width: 62%;
     height: 100%;
     display: flex;
     flex-direction: column;
@@ -30,7 +30,7 @@ button {
     overflow-y: auto;
 }
 #chatsList {
-    width: 30%;
+    width: 25%;
     height: 100%;
     border-right: 1px solid #3a3a3a;
     background-color: #2b2b2b;
@@ -100,4 +100,23 @@ button {
     width: fit-content;
     max-width: 60%;
     align-self: flex-start;
+}
+#userList {
+    width: 12%;
+    height: 100%;
+    border-left: 1px solid #3a3a3a;
+    background-color: #2b2b2b;
+    padding: 10px;
+    overflow-y: auto;
+    box-sizing: border-box;
+}
+.memberRow {
+    padding: 6px 0;
+    border-bottom: 1px solid #3a3a3a;
+    display: flex;
+    justify-content: space-between;
+}
+.memberRole {
+    color: #888;
+    font-size: 0.8em;
 }

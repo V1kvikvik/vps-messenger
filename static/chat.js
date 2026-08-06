@@ -71,8 +71,24 @@ async function GetChatMembers(currentChatId) {
         })
         return await membersList.json()
     }
-    memberList = await GetMembers()
-    console.log(memberList)
+    const memberList = await GetMembers()
+    const membersPanel = document.querySelector('#membersPanel')
+    membersPanel.innerHTML = ''
+    for (const m of memberList) {
+        const row = document.createElement('div')
+        row.className = 'memberRow'
+
+        const nameSpan = document.createElement('span')
+        nameSpan.textContent = m.username
+
+        const roleSpan = document.createElement('span')
+        roleSpan.textContent = m.role
+        roleSpan.className = 'memberRole'
+
+        row.appendChild(nameSpan)
+        row.appendChild(roleSpan)
+        membersPanel.appendChild(row)
+    }
 }
 
 async function WriteHistory(currentChatId) {
