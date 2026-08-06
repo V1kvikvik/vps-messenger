@@ -24,11 +24,11 @@ async function ClickRegister(){
                 })
                 chatsList.innerHTML = ''
                 AvailableChats()
-                GetChatMembers(targetInstance.dataset.chatId)
             }
         }
         if (targetInstance.dataset.chatId){
             WriteHistory(targetInstance.dataset.chatId)
+            GetChatMembers(targetInstance.dataset.chatId)
             if (previousChat['object']) {
                 previousChat['object'].className = 'chat'
             }
