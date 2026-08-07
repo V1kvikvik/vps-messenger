@@ -1,3 +1,52 @@
+var currentChat = {'id':0, 'object':null}
+var previousChat = {'id':0, 'object':null}
+const token = localStorage.getItem('token')
+if(!token){
+    window.location.href = '/index.html'
+}
+const payload = JSON.parse(atob(token.split('.')[1]))
+const myUsername = payload.username
+const messageWindow = document.querySelector('#messagesWindow')
+const chatsList = document.querySelector('#chatsList')
+
+let ws
+function connectWS() {
+    ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws')
+    ws.onopen = () => ws.send(token)
+    ws.addEventListener("message", (event) => {
+        const data = JSON.parse(event.data)
+        console.log(data)
+        if(data.type == "message"){
+            const newMessage = document.createElement('div')
+            const newMessageText = document.createElement('div')
+            newMessageText.textContent = data.content
+            if(data.sender != myUsername){
+                newMessage.className = 'IncomingMessage'
+                const messageSource = document.createElement('div')
+                messageSource.textContent = data.sender
+                messageSource.className = 'senderName'
+                newMessage.appendChild(messageSource)
+                newMessage.appendChild(newMessageText)
+            } else {
+                newMessage.className = 'message'
+                newMessage.appendChild(newMessageText)
+            }
+            messageWindow.appendChild(newMessage)
+        } else if(data.type == "chat_update"){
+            chatsList.innerHTML = ''
+            AvailableChats()
+        }
+    })
+    ws.onclose = (event) => {
+        console.log('WS closed, reconnecting in 2s...', event.code, event.reason)
+        setTimeout(connectWS, 2000)
+    }
+    ws.onerror = (err) => {
+        console.log('WS error:', err)
+    }
+}
+
+
 function Send(){
     const sendButton = document.querySelector('#sendButton')
     sendButton.addEventListener('click', (event)=>{
@@ -7,6 +56,7 @@ function Send(){
     })
     
 }
+
 
 async function ClickRegister(){
     document.addEventListener('click', async function(event){
@@ -164,45 +214,8 @@ async function AvailableChats() {
         chatsList.appendChild(chatRow)
     }
 }
-var currentChat = {'id':0, 'object':null}
-var previousChat = {'id':0, 'object':null}
-const token = localStorage.getItem('token')
-if(!token){
-    window.location.href = '/index.html'
-}
-const payload = JSON.parse(atob(token.split('.')[1]))
-const myUsername = payload.username
-const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws')
-const messageWindow = document.querySelector('#messagesWindow')
-const chatsList = document.querySelector('#chatsList')
-ws.onopen = () => ws.send(token)
-ws.addEventListener("message", (event) => {
-    const data = JSON.parse(event.data)
-    console.log(data)
-    if(data.type == "message"){
-        const newMessage = document.createElement('div')
-        const newMessageText = document.createElement('div')
-        newMessageText.textContent = data.content
-        if(data.sender != myUsername){
-            newMessage.className = 'IncomingMessage'
-            const messageSource = document.createElement('div')
-            messageSource.textContent = data.sender
-            messageSource.className = 'senderName'
-            newMessage.appendChild(messageSource)
-            newMessage.appendChild(newMessageText)
-        } else {
-            newMessage.className = 'message'
-            newMessage.appendChild(newMessageText)
-        }
-        messageWindow.appendChild(newMessage)
-    } else if(data.type == "chat_update"){
-        chatsList.innerHTML = ''
-        AvailableChats()
-    }
-        
-        
-});
 
+connectWS()
 ClickRegister()
 Send()
 AvailableChats()
