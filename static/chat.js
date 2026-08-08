@@ -48,13 +48,11 @@ function connectWS() {
 
 
 function Send(){
-    const sendButton = document.querySelector('#sendButton')
-    sendButton.addEventListener('click', (event)=>{
-        const value = document.querySelector('#messageText').value
-        document.querySelector('#messageText').value = ''
-        ws.send(JSON.stringify({chat_id: parseInt(currentChat['id']), message: value}))
-    })
-    
+    const messageInput = document.querySelector('#messageText')
+    const value = messageInput.value
+    if (value.trim() === '') return
+    messageInput.value = ''
+    ws.send(JSON.stringify({chat_id: parseInt(currentChat['id']), message: value}))
 }
 
 
@@ -215,9 +213,18 @@ async function AvailableChats() {
     }
 }
 
+
+document.querySelector('#messageText').addEventListener('keydown', (event) => {
+    if(event.key === 'Enter'){
+        Send()
+    }
+})
+document.querySelector('#sendButton').addEventListener('click', (event)=>{ 
+    Send()
+})
+
 connectWS()
 ClickRegister()
-Send()
 AvailableChats()
 CreateChat()
 
