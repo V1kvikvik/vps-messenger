@@ -91,6 +91,19 @@ button {
     padding: 5px 8px;
     cursor: pointer;
 }
+.friendRequestContainer button {
+    background-color: transparent;
+    border: 1px solid var(--wire);
+    border-radius: 5px;
+    color: var(--muted);
+    font-size: 12px;
+    padding: 5px 8px;
+    cursor: pointer;
+}
+.friendRequestContainer button:hover {
+    border-color: var(--copper);
+    color: var(--copper-bright);
+}
 
 .chatRow button:hover {
     border-color: var(--copper);
@@ -284,6 +297,22 @@ button {
     outline: none;
     font-family: 'IBM Plex Sans', sans-serif;
     font-size: 14px;
+}
+.friendRequestContainer {
+    display: flex;
+    gap: 8px;
+}
+#friendRequests {
+    margin-top: 30px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+#friends {
+    margin-top: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
 @media (max-width: 900px) {

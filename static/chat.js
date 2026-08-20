@@ -1,5 +1,6 @@
 var currentChat = {'id':0, 'object':null}
 var previousChat = {'id':0, 'object':null}
+var friends = []
 const token = localStorage.getItem('token')
 if(!token){
     window.location.href = '/index.html'
@@ -8,7 +9,7 @@ const payload = JSON.parse(atob(token.split('.')[1]))
 const myUsername = payload.username
 const messageWindow = document.querySelector('#messagesWindow')
 const chatsList = document.querySelector('#chatsList')
-var currentChatSelectionMode = 'ChatMembers'
+var currentChatSelectionMode = 'FriendList'
 
 let ws
 function connectWS() {
@@ -36,6 +37,8 @@ function connectWS() {
         } else if(data.type == "chat_update"){
             chatsList.innerHTML = ''
             AvailableChats()
+        } else if(data.type == "friend_request_update"){
+            GetFriendList()
         }
     })
     ws.onclose = (event) => {
@@ -95,26 +98,35 @@ async function ClickRegister(){
         }
         if (targetInstance.id === 'friendListLabel'){
             const userList = document.getElementById('userList')
-
+            const listsHolder = document.querySelector('#ListsHolder')
             const membersButton = document.querySelector('#userListLabel')
             const friendsButton = document.querySelector('#friendListLabel')
             friendsButton.classList.add('active')
             membersButton.classList.remove('active')
             currentChatSelectionMode = 'FriendList'
-            const membersPanel = document.querySelector('#userList')
-            membersPanel.innerHTML = `<div id="listsContainer">
-                                        <button id="userListLabel" class="listTab">Members</button>
-                                        <button id="friendListLabel" class="listTab active">Friends</button>
-                                    </div>
-                                    <div class="FriendInputHolder">
-                                        <input
-                                            type="text"
-                                            id="friendRequestField"
-                                            placeholder="Enter username to add to your friend list"
-                                            required>
-                                        <button id="friendSendButton">Send request</button>
-                                    </div>`
+            listsHolder.innerHTML = `
+             <div id="friendsList">
+                <div class="FriendInputHolder">
+                    <input
+                        type="text"
+                        id="friendRequestField"
+                        placeholder="Enter username to add to your friend list"
+                        required>
+                    <button id="friendSendButton">Send request</button>
+                </div>
+                <div id="friends">
+
+                </div>
+                <hr>
+                <span>Pending friend requests</span>
+                <div id="friendRequests">
+                    
+                </div>
+            </div>`
             userList.style.width = "26%"
+            friends.forEach(element => {
+               addFriend(element) 
+            });
         }
         if (targetInstance.dataset.chatId){
             WriteHistory(targetInstance.dataset.chatId)
@@ -151,46 +163,151 @@ async function ClickRegister(){
                 })
             }
         }
+        if (targetInstance.classList.contains('acceptButton')){
+            ChangeFriendRequestStatus(targetInstance.dataset.USERNAME, 'Accepted')
+        }
+        if (targetInstance.classList.contains('rejectButton')){
+            ChangeFriendRequestStatus(targetInstance.dataset.USERNAME, 'Rejected')
+            console.log('Tried to delete user`s request from DB: ', targetInstance.dataset.USERNAME)
+        }
         
     })
 }
 
-async function FriendRequest(addresseeUsername) {
-    async function SendRequest() {
-        friendRequestStatus = await fetch(`/friendRequest?addresseeUsername=${addresseeUsername}`, {
+async function ChangeFriendRequestStatus(addresseeUsername, newStatus){
+    async function ChangeStatus() {
+        var response = await fetch(`/friendsChangeStatus`, {
             method: 'POST',
             headers: {'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                username: addresseeUsername,
+                status: newStatus
+            })
         })
+        if (!response.ok) {
+            console.error('Failed to change friend request status')
+        }
     }
-    SendRequest()
+    ChangeStatus()
 }
 
-async function GetChatMembers(currentChatId) {
-    const membersPanel = document.querySelector('#userList')
-    membersPanel.innerHTML = '<div id="listsContainer"><button id="userListLabel"  class="listTab active">Members</button><button id="friendListLabel" class="listTab">Friends</button></div>'
-    async function GetMembers() {
-        membersList = await fetch(`/members?chat_id=${currentChatId}`, {
+function addFriend(data){
+    const friendRequestsList = document.querySelector('#friendRequests')
+    
+    const friendRequestContainer = document.createElement('div')
+    friendRequestContainer.className = 'friendRequestContainer'
+
+    const friendRequest = document.createElement('span')
+    friendRequest.className = 'friendRequest'
+    friendRequestContainer.appendChild(friendRequest)
+
+    if(data.addressee === myUsername && data.status === 'Pending'){
+        friendRequest.textContent = `${data.requester}`
+        const acceptButton = document.createElement('button')
+        acceptButton.className = 'acceptButton'
+        acceptButton.dataset.USERNAME = data.requester
+        acceptButton.style.width = '20%'
+        acceptButton.textContent = 'Accept'
+        friendRequestContainer.appendChild(acceptButton)
+
+        const rejectButton = document.createElement('button')
+        rejectButton.className = 'rejectButton'
+        rejectButton.dataset.USERNAME = data.requester
+        rejectButton.style.width = '20%'
+        rejectButton.textContent = 'Reject'
+        friendRequestContainer.appendChild(rejectButton)
+    } else if(data.addressee != myUsername && data.status === 'Pending'){
+        friendRequest.textContent = `${data.addressee}`
+    } else if(data.addressee != myUsername && data.status === 'Accepted'){
+        const friendListDiv = document.querySelector('#friends')
+        const friendSpan = document.createElement('span')
+        friendSpan.className = 'friend'
+        friendSpan.textContent = `${data.addressee}`
+        friendListDiv.appendChild(friendSpan)
+        console.log('I am cool')
+    } else if(data.addressee === myUsername && data.status === 'Accepted'){
+        const friendListDiv = document.querySelector('#friends')
+        const friendSpan = document.createElement('span')
+        friendSpan.className = 'friend'
+        friendSpan.textContent = `${data.requester}`
+        friendListDiv.appendChild(friendSpan)
+        console.log('I am cool')
+    }
+        
+    friendRequestsList.appendChild(friendRequestContainer)
+}
+
+async function FriendRequest(addresseeUsername) {
+    const response = await fetch(
+        `/friendRequest?addresseeUsername=${encodeURIComponent(addresseeUsername)}`,
+        {
+            method: 'GET',
+            headers: {
+                'Authorization': 'Bearer ' + token
+            }
+        }
+    )
+
+    const data = await response.json()
+    
+    addFriend(data)
+    console.log(friends)
+}
+
+async function GetFriendList() {
+    const friendsListDiv = document.querySelector('#friends')
+    const friendsRequestsDiv = document.querySelector('#friendRequests')
+    friendsListDiv.innerHTML = ''
+    friendsRequestsDiv.innerHTML = ''
+    async function GetFriends() {
+        var friendsList = await fetch(`/friendsList`, {
             method: 'GET',
             headers: {'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'},
         })
-        return await membersList.json()
+        return await friendsList.json()
     }
-    const memberList = await GetMembers()
-    for (const m of memberList) {
-        const row = document.createElement('div')
-        row.className = 'memberRow'
+    var friendsHistory = await GetFriends()
+    console.log(friendsHistory)
+    friends.length = 0
+    friendsHistory.forEach(element => {
+        friends.push(element)
+        addFriend(element)
+    });
+}
 
-        const nameSpan = document.createElement('span')
-        nameSpan.textContent = m.username
+async function GetChatMembers(currentChatId) {
+    const listsHolder = document.querySelector('#ListsHolder')
+    listsHolder.innerHTML = `
+    <div id="membersList">
 
-        const roleSpan = document.createElement('span')
-        roleSpan.textContent = m.role
-        roleSpan.className = 'memberRole'
+    </div>`
+    if(currentChatSelectionMode === 'ChatMembers'){
+        async function GetMembers() {
+            var membersList = await fetch(`/members?chat_id=${currentChatId}`, {
+                method: 'GET',
+                headers: {'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'},
+            })
+            return await membersList.json()
+        }
+        const membersListHtml = document.querySelector('#membersList')
+        const memberList = await GetMembers()
+        for (const m of memberList) {
+            const row = document.createElement('div')
+            row.className = 'memberRow'
 
-        row.appendChild(nameSpan)
-        row.appendChild(roleSpan)
-        membersPanel.appendChild(row)
+            const nameSpan = document.createElement('span')
+            nameSpan.textContent = m.username
+
+            const roleSpan = document.createElement('span')
+            roleSpan.textContent = m.role
+            roleSpan.className = 'memberRole'
+
+            row.appendChild(nameSpan)
+            row.appendChild(roleSpan)
+            membersListHtml.appendChild(row)
+        }
     }
+        
 }
 
 async function WriteHistory(currentChatId) {
@@ -274,22 +391,26 @@ document.querySelector('#messageText').addEventListener('keydown', (event) => {
     }
 })
 document.querySelector('#sendButton').addEventListener('click', (event)=>{ 
+    const button = event.target.closest('#friendSendButton')
+    if (!button) return
     Send()
 })
-document.querySelector('#friendSendButton').addEventListener('click', (event)=>{
+document.querySelector('#ListsHolder').addEventListener('click', (event)=>{
     SendFriendRequest()
 })
 document.querySelector('#friendSendButton').addEventListener('keydown', (event)=>{
     if(event.key === 'Enter'){
+        const button = event.target.closest('#friendSendButton')
+        if (!button) return
         SendFriendRequest()
     }
 })
 
+
 connectWS()
 ClickRegister()
 AvailableChats()
-CreateChat()
-
+GetFriendList()
 
 
 

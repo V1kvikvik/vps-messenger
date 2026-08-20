@@ -35,15 +35,30 @@
             <button id="userListLabel" class="listTab">Members</button>
             <button id="friendListLabel" class="listTab active">Friends</button>
         </div>
-        <div class="FriendInputHolder">
-            <input
-                type="text"
-                id="friendRequestField"
-                placeholder="Enter username to add to your friend list"
-                required>
-            <button id="friendSendButton">Send request</button>
+        <div id="ListsHolder">
+            <div id="friendsList">
+                <div class="FriendInputHolder">
+                    <input
+                        type="text"
+                        id="friendRequestField"
+                        placeholder="Enter username to add to your friend list"
+                        required>
+                    <button id="friendSendButton">Send request</button>
+                </div>
+                <div id="friends">
+
+                </div>
+                <hr>
+                <span>Pending friend requests</span>
+                <div id="friendRequests">
+                    
+                </div>
+            </div>
         </div>
+        
+        
     </div>
+        
 
     <script>
         // Decorative only — mirrors the selected chat's name into #who.

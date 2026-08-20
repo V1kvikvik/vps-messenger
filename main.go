@@ -21,8 +21,15 @@ import (
 	"golang.org/x/time/rate"
 )
 
-type FriendRequest struct {
+type FriendRequestStatusChange struct {
+	Username string `json:"username"`
+	Status   string `json:"status"`
+}
+
+type Friend struct {
 	Addressee string `json:"addressee"`
+	Requester string `json:"requester"`
+	Status    string `json:"status"`
 }
 
 type GetChatMembersRequest struct {
@@ -851,6 +858,147 @@ func main() {
 				log.Println("Error while creating friend request:", err)
 				http.Error(w, "Internal server error", http.StatusInternalServerError)
 				return
+			}
+			var friend Friend
+			friend.Addressee = r.URL.Query().Get("addresseeUsername")
+			friend.Status = "Pending"
+			friend.Requester = username
+			w.WriteHeader(http.StatusCreated)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(friend)
+		}
+
+	})))
+	http.HandleFunc("/friendsList", rateLimitMiddleware(2, 5, recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		var claims jwt.MapClaims
+		token := r.Header.Get("Authorization")
+		token = strings.TrimPrefix(token, "Bearer ")
+		_, tokerr := jwt.ParseWithClaims(token, &claims, func(t *jwt.Token) (any, error) {
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+			}
+			return secretKey, nil
+		}, jwt.WithValidMethods([]string{"HS256"}))
+		if tokerr != nil {
+			log.Println("Something went during the token check: ", tokerr)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		username, ok := claims["username"].(string)
+		if !ok || username == "" {
+			log.Println("Token missing valid username claim")
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		var requesterId int
+		dbuserselect := dbpool.QueryRow(context.Background(), "SELECT id FROM users WHERE username = ($1)", username).Scan(&requesterId)
+		if dbuserselect != nil {
+			fmt.Println("Something went wrong when parsing to DB: ", dbuserselect)
+			w.WriteHeader(http.StatusConflict)
+			return
+		}
+		friendsList, friendsListErr := dbpool.Query(r.Context(), `SELECT
+								requester.username AS requester_username,
+								addressee.username AS addressee_username,
+								fr.status
+							FROM friend_requests fr
+							JOIN users requester
+								ON requester.id = fr.requester_id
+							JOIN users addressee
+								ON addressee.id = fr.addressee_id
+							WHERE fr.requester_id = $1
+							OR fr.addressee_id = $1;`, requesterId)
+		if friendsListErr != nil {
+			log.Println("Something went wrong while getting the friend_request", friendsListErr)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		var friendsArr []Friend
+		for friendsList.Next() {
+			var friend Friend
+			if err := friendsList.Scan(&friend.Requester, &friend.Addressee, &friend.Status); err != nil {
+				log.Println("Something went wrong when scanning friend requests: ", err)
+				continue
+			}
+			friendsArr = append(friendsArr, friend)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(friendsArr)
+		defer friendsList.Close()
+	})))
+	http.HandleFunc("/friendsChangeStatus", rateLimitMiddleware(2, 5, recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		var claims jwt.MapClaims
+		token := r.Header.Get("Authorization")
+		token = strings.TrimPrefix(token, "Bearer ")
+		_, tokerr := jwt.ParseWithClaims(token, &claims, func(t *jwt.Token) (any, error) {
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+			}
+			return secretKey, nil
+		}, jwt.WithValidMethods([]string{"HS256"}))
+		if tokerr != nil {
+			log.Println("Something went during the token check: ", tokerr)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		username, ok := claims["username"].(string)
+		if !ok || username == "" {
+			log.Println("Token missing valid username claim")
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		var requesterId int
+		dbuserselect := dbpool.QueryRow(context.Background(), "SELECT id FROM users WHERE username = ($1)", username).Scan(&requesterId)
+		if dbuserselect != nil {
+			fmt.Println("Something went wrong when parsing requesterId from DB: ", dbuserselect)
+			w.WriteHeader(http.StatusConflict)
+			return
+		}
+		var req FriendRequestStatusChange
+		err := json.NewDecoder(r.Body).Decode(&req)
+		if err != nil {
+			fmt.Println("The error occured with json decoding: ", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		var changeStatus = req.Status
+		var addresseeId int
+		dbuserselectaddressee := dbpool.QueryRow(r.Context(), "SELECT id FROM users WHERE username = ($1)", req.Username).Scan(&addresseeId)
+		if dbuserselectaddressee != nil {
+			log.Println(
+				"Something went wrong when parsing addresseeId from DB: ",
+				dbuserselectaddressee,
+			)
+		}
+		switch changeStatus {
+		case "Accepted":
+			_, err := dbpool.Exec(r.Context(), "UPDATE friend_requests SET status='Accepted' WHERE requester_id = $1 AND addressee_id = $2 AND status = 'Pending'", addresseeId, requesterId)
+			if err != nil {
+				log.Println("Error while accepting friend request:", err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+		case "Rejected":
+			_, err := dbpool.Exec(r.Context(), "DELETE FROM friend_requests WHERE (requester_id = $1 AND addressee_id = $2) OR (requester_id = $2 AND addressee_id = $1)", addresseeId, requesterId)
+			if err != nil {
+				log.Println("Error while accepting friend request:", err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+		}
+		payload, marshalErr := json.Marshal(WsMessage{Type: "friend_request_update"})
+		if marshalErr != nil {
+			log.Println("Something went wrong while marshaling friend_request_update: ", marshalErr)
+			return
+		}
+		for key, value := range mainHub.connections {
+			if value.username == username {
+
+				if err := value.SafeWrite(websocket.TextMessage, payload); err != nil {
+					log.Println("Something bad happened: ", err)
+					delete(mainHub.connections, key)
+				}
 			}
 		}
 	})))
