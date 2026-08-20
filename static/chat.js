@@ -8,6 +8,7 @@ const payload = JSON.parse(atob(token.split('.')[1]))
 const myUsername = payload.username
 const messageWindow = document.querySelector('#messagesWindow')
 const chatsList = document.querySelector('#chatsList')
+var currentChatSelectionMode = 'ChatMembers'
 
 let ws
 function connectWS() {
@@ -54,6 +55,14 @@ function Send(){
     messageInput.value = ''
     ws.send(JSON.stringify({chat_id: parseInt(currentChat['id']), message: value}))
 }
+function SendFriendRequest(){
+    const usernameInput = document.querySelector('#friendRequestField')
+    const value = usernameInput.value
+    if (value.trim() === '') return
+    usernameInput.value = ''
+    FriendRequest(value)
+    console.log("Tried to send friend request")
+}
 
 
 async function ClickRegister(){
@@ -74,9 +83,44 @@ async function ClickRegister(){
                 AvailableChats()
             }
         }
+        if (targetInstance.id === 'userListLabel'){
+            const membersButton = document.querySelector('#userListLabel')
+            const friendsButton = document.querySelector('#friendListLabel')
+            membersButton.classList.add('active')
+            friendsButton.classList.remove('active')
+            currentChatSelectionMode = 'ChatMembers'
+            const userList = document.getElementById('userList')
+            userList.style.width = "13%"
+            GetChatMembers(currentChat['id'])
+        }
+        if (targetInstance.id === 'friendListLabel'){
+            const userList = document.getElementById('userList')
+
+            const membersButton = document.querySelector('#userListLabel')
+            const friendsButton = document.querySelector('#friendListLabel')
+            friendsButton.classList.add('active')
+            membersButton.classList.remove('active')
+            currentChatSelectionMode = 'FriendList'
+            const membersPanel = document.querySelector('#userList')
+            membersPanel.innerHTML = `<div id="listsContainer">
+                                        <button id="userListLabel" class="listTab">Members</button>
+                                        <button id="friendListLabel" class="listTab active">Friends</button>
+                                    </div>
+                                    <div class="FriendInputHolder">
+                                        <input
+                                            type="text"
+                                            id="friendRequestField"
+                                            placeholder="Enter username to add to your friend list"
+                                            required>
+                                        <button id="friendSendButton">Send request</button>
+                                    </div>`
+            userList.style.width = "26%"
+        }
         if (targetInstance.dataset.chatId){
             WriteHistory(targetInstance.dataset.chatId)
-            GetChatMembers(targetInstance.dataset.chatId)
+            if (currentChatSelectionMode === 'ChatMembers'){
+                GetChatMembers(targetInstance.dataset.chatId)
+            }
             if (previousChat['object']) {
                 previousChat['object'].className = 'chat'
             }
@@ -111,7 +155,19 @@ async function ClickRegister(){
     })
 }
 
+async function FriendRequest(addresseeUsername) {
+    async function SendRequest() {
+        friendRequestStatus = await fetch(`/friendRequest?addresseeUsername=${addresseeUsername}`, {
+            method: 'POST',
+            headers: {'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'},
+        })
+    }
+    SendRequest()
+}
+
 async function GetChatMembers(currentChatId) {
+    const membersPanel = document.querySelector('#userList')
+    membersPanel.innerHTML = '<div id="listsContainer"><button id="userListLabel"  class="listTab active">Members</button><button id="friendListLabel" class="listTab">Friends</button></div>'
     async function GetMembers() {
         membersList = await fetch(`/members?chat_id=${currentChatId}`, {
             method: 'GET',
@@ -120,8 +176,6 @@ async function GetChatMembers(currentChatId) {
         return await membersList.json()
     }
     const memberList = await GetMembers()
-    const membersPanel = document.querySelector('#userList')
-    membersPanel.innerHTML = ''
     for (const m of memberList) {
         const row = document.createElement('div')
         row.className = 'memberRow'
@@ -221,6 +275,14 @@ document.querySelector('#messageText').addEventListener('keydown', (event) => {
 })
 document.querySelector('#sendButton').addEventListener('click', (event)=>{ 
     Send()
+})
+document.querySelector('#friendSendButton').addEventListener('click', (event)=>{
+    SendFriendRequest()
+})
+document.querySelector('#friendSendButton').addEventListener('keydown', (event)=>{
+    if(event.key === 'Enter'){
+        SendFriendRequest()
+    }
 })
 
 connectWS()

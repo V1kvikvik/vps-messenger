@@ -21,6 +21,10 @@ import (
 	"golang.org/x/time/rate"
 )
 
+type FriendRequest struct {
+	Addressee string `json:"addressee"`
+}
+
 type GetChatMembersRequest struct {
 	Chat_Id int `json:"chat_id"`
 }
@@ -737,7 +741,7 @@ func main() {
 		mainHub.SendToEveryone(1, jsonMsg)
 	})))
 
-	http.HandleFunc("/members", rateLimitMiddleware(3, 10, recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/members", rateLimitMiddleware(5, 20, recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		chatId, intErr := strconv.Atoi(r.URL.Query().Get("chat_id"))
 		if intErr != nil {
 			log.Println("Error while getting chat id: ", intErr)
@@ -794,6 +798,61 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(memberArray)
 
+	})))
+	http.HandleFunc("/friendRequest", rateLimitMiddleware(2, 5, recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		var claims jwt.MapClaims
+		token := r.Header.Get("Authorization")
+		token = strings.TrimPrefix(token, "Bearer ")
+		_, tokerr := jwt.ParseWithClaims(token, &claims, func(t *jwt.Token) (any, error) {
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+			}
+			return secretKey, nil
+		}, jwt.WithValidMethods([]string{"HS256"}))
+		if tokerr != nil {
+			log.Println("Something went during the token check: ", tokerr)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		username, ok := claims["username"].(string)
+		if !ok || username == "" {
+			log.Println("Token missing valid username claim")
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		var requesterId int
+		dbuserselect := dbpool.QueryRow(context.Background(), "SELECT id FROM users WHERE username = ($1)", username).Scan(&requesterId)
+		if dbuserselect != nil {
+			fmt.Println("Something went wrong when parsing to DB: ", dbuserselect)
+			w.WriteHeader(http.StatusConflict)
+			return
+		}
+		var addresseeId int
+		addresseeErr := dbpool.QueryRow(r.Context(), "SELECT id FROM users WHERE username = ($1)", r.URL.Query().Get("addresseeUsername")).Scan(&addresseeId)
+		if addresseeErr != nil {
+			log.Println("Error occured while getting the friend request addressee`s userid", addresseeErr)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		var exists bool
+		matchingRowsErr := dbpool.QueryRow(r.Context(), "SELECT EXISTS(SELECT 1 FROM friend_requests WHERE (requester_id = $1 AND addressee_id = $2) OR (requester_id = $2 AND addressee_id = $1))", requesterId, addresseeId).Scan(&exists)
+		if matchingRowsErr != nil {
+			log.Println("Error occured while checking the id pair in friend_requests", matchingRowsErr)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if exists == true {
+			log.Println("The user is already a friend/The request is already pending")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		} else {
+			_, err := dbpool.Exec(r.Context(), "INSERT INTO friend_requests (requester_id, addressee_id, status) VALUES ($1, $2, $3)", requesterId, addresseeId, "Pending")
+			if err != nil {
+				log.Println("Error while creating friend request:", err)
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+				return
+			}
+		}
 	})))
 
 	http.Handle("/", http.FileServer(http.Dir("static")))

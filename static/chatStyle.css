@@ -212,6 +212,17 @@ button {
     font-weight: 500;
     cursor: pointer;
 }
+#friendSendButton {
+    height: 24px;
+    padding: 0 18px;
+    background-color: var(--copper);
+    color: #16110a;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+}
 
 #sendButton:hover {
     background-color: var(--copper-bright);
@@ -220,7 +231,7 @@ button {
 /* --- Member list (right) --- */
 
 #userList {
-    width: 13%;
+    width: 26%; /* Remember to change width back to 13%*/
     height: 100%;
     border-left: 1px solid var(--wire);
     background-color: var(--panel);
@@ -229,13 +240,25 @@ button {
     box-sizing: border-box;
 }
 
-#userListLabel {
+#listsContainer {
+    display: flex;
+    gap: 20px;
+}
+.listTab {
     font-family: 'IBM Plex Mono', monospace;
     font-size: 11px;
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--muted);
-    margin-bottom: 12px;
+
+    background: none;
+    border: none;
+    padding: 0;
+
+    cursor: pointer;
+}
+.listTab.active {
+    color: var(--copper-bright);;
 }
 
 .memberRow {
@@ -251,6 +274,16 @@ button {
     color: var(--muted);
     font-size: 0.75em;
     font-family: 'IBM Plex Mono', monospace;
+}
+#friendRequestField {
+    margin-top: 10px;
+    width: 60%;
+    background-color: black;
+    color: var(--paper);
+    border: solid, rgb(27, 27, 27);
+    outline: none;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 14px;
 }
 
 @media (max-width: 900px) {

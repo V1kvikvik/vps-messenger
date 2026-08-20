@@ -31,7 +31,18 @@
         </div>
     </div>
     <div id="userList">
-        <div id="userListLabel">Members</div>
+        <div id="listsContainer">
+            <button id="userListLabel" class="listTab">Members</button>
+            <button id="friendListLabel" class="listTab active">Friends</button>
+        </div>
+        <div class="FriendInputHolder">
+            <input
+                type="text"
+                id="friendRequestField"
+                placeholder="Enter username to add to your friend list"
+                required>
+            <button id="friendSendButton">Send request</button>
+        </div>
     </div>
 
     <script>
