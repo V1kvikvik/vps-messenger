@@ -18,7 +18,7 @@ function connectWS() {
     ws.addEventListener("message", (event) => {
         const data = JSON.parse(event.data)
         console.log(data)
-        if(data.type == "message"){
+        if(data.type == "message" && typeof currentChat !== 'undefined' && currentChat !== null && data.chat_id == currentChat['id']){
             const newMessage = document.createElement('div')
             const newMessageText = document.createElement('div')
             newMessageText.textContent = data.content
@@ -95,6 +95,9 @@ async function ClickRegister(){
             const userList = document.getElementById('userList')
             userList.style.width = "13%"
             GetChatMembers(currentChat['id'])
+        }
+        if (targetInstance.id === 'sendButton'){
+            Send()
         }
         if (targetInstance.id === 'friendListLabel'){
             const userList = document.getElementById('userList')

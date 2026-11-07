@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -425,7 +426,7 @@ func main() {
 				continue
 			}
 
-			jsonMsg, _ := json.Marshal(WsMessage{Type: "message", Content: req.Message, Sender: usernameVal})
+			jsonMsg, _ := json.Marshal(WsMessage{Type: "message", Content: req.Message, Sender: usernameVal, ChatId: req.ChatId})
 			mainHub.Broadcast(typ, jsonMsg, req.ChatId)
 		}
 	}))
@@ -604,14 +605,14 @@ func main() {
 		}
 
 		messages, readErr := dbpool.Query(r.Context(),
-			"SELECT content, messages.created_at, users.username FROM messages JOIN users ON messages.sender_id = users.id WHERE chat_id = $1 ORDER BY created_at ASC LIMIT 50",
+			"SELECT content, messages.created_at, users.username FROM messages JOIN users ON messages.sender_id = users.id WHERE chat_id = $1 ORDER BY created_at DESC LIMIT 50",
 			chatId)
 		if readErr != nil {
 			log.Println("Something went wrong when reading messages: ", readErr)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		var messagesArray []Message
+		messagesArray := make([]Message, 0, 50)
 		defer messages.Close()
 		for messages.Next() {
 			var temp string
@@ -619,10 +620,18 @@ func main() {
 			var sender string
 			if err := messages.Scan(&temp, &createdAt, &sender); err != nil {
 				log.Println("Something went wrong when scanning message: ", err)
-				continue
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+				return
 			}
 			messagesArray = append(messagesArray, Message{temp, createdAt, sender})
 		}
+		messagesErr := messages.Err()
+		if messagesErr != nil {
+			log.Println("Something went wrong while iterating over messages: ", messagesErr)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+		slices.Reverse(messagesArray)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(messagesArray)
 	})))
@@ -826,7 +835,7 @@ func main() {
 		}
 		defer rows.Close()
 
-		var memberArray []ChatMember
+		memberArray := make([]ChatMember, 0)
 		for rows.Next() {
 			var m ChatMember
 			if err := rows.Scan(&m.Username, &m.Role); err != nil {
