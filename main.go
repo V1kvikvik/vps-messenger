@@ -51,6 +51,7 @@ type WsMessage struct {
 	Type    string `json:"type"`
 	Content string `json:"content"`
 	Sender  string `json:"sender,omitempty"`
+	ChatId  int    `json:"chat_id,omitempty"`
 }
 
 type RemoveFromChatRequest struct {
@@ -149,14 +150,19 @@ func cleanupVisitors() {
 }
 
 func clientIP(r *http.Request) string {
-	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-		parts := strings.Split(fwd, ",")
-		return strings.TrimSpace(parts[0])
-	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr
 	}
+
+	if host == "127.0.0.1" || host == "::1" {
+		forwarded := r.Header.Get("X-Real-IP")
+
+		if ip := net.ParseIP(forwarded); ip != nil {
+			return ip.String()
+		}
+	}
+
 	return host
 }
 
@@ -201,32 +207,31 @@ func (h *Hub) Remove(name *websocket.Conn) {
 	delete(h.connections, name)
 }
 func (h *Hub) Broadcast(typ int, message []byte, chatid int) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
 	UserRows, DBerr := dbpool.Query(context.Background(), "SELECT u.username FROM users u JOIN chat_members cm ON u.id = cm.user_id WHERE cm.chat_id = $1", chatid)
 	if DBerr != nil {
 		log.Println("Error when getting values from DB: ", DBerr)
 		return
 	}
-	defer UserRows.Close()
+	var users []string
 	for UserRows.Next() {
 		var username string
 		Geterr := UserRows.Scan(&username)
 		if Geterr != nil {
 			log.Println("Can`t get username from DB: ", Geterr)
+			UserRows.Close()
 			return
 		}
-		for key, value := range h.connections {
-			if value.username == username {
-				err := value.SafeWrite(typ, message)
-				if err != nil {
-					log.Println("Something bad happened: ", err)
-					delete(h.connections, key)
-				}
-			}
-		}
+		users = append(users, username)
 	}
-
+	if UserRows.Err() != nil {
+		log.Println("Error while iterating over user rows: ", UserRows.Err())
+		UserRows.Close()
+		return
+	}
+	UserRows.Close()
+	for _, user := range users {
+		h.SendToUser(user, typ, message)
+	}
 }
 
 const maxBodyBytes = 1 << 20
@@ -260,14 +265,42 @@ func isValidPassword(p string) bool {
 	return len(p) >= 8 && len(p) <= 72 // bcrypt молча обрезает пароли длиннее 72 байт
 }
 
+func (h *Hub) SendToUser(username string, typ int, message []byte) {
+	h.mu.Lock()
+	var connection_safe_pointer []*ClientConn
+	for _, value := range h.connections {
+		if value.username == username {
+			connection_safe_pointer = append(connection_safe_pointer, value)
+		}
+	}
+	h.mu.Unlock()
+	if len(connection_safe_pointer) == 0 {
+		log.Println("No connections found for user:", username)
+		return
+	}
+	for _, conn := range connection_safe_pointer {
+		err := conn.SafeWrite(typ, message)
+		if err != nil {
+			log.Println("SafeWrite failed during SendToUser for user", username, ":", err)
+			h.Remove(conn.conn)
+			continue
+		}
+	}
+}
+
 func (h *Hub) SendToEveryone(typ int, message []byte) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
-	for key, value := range h.connections {
-		err := value.SafeWrite(typ, message)
+	var users []*ClientConn
+	for _, value := range h.connections {
+		users = append(users, value)
+	}
+	h.mu.Unlock()
+	for _, user := range users {
+		err := user.SafeWrite(typ, message)
 		if err != nil {
-			log.Println("Something bad happened: ", err)
-			delete(h.connections, key)
+			log.Println("SafeWrite failed during SendToEveryone for user", user.username, ":", err)
+			h.Remove(user.conn)
+			continue
 		}
 	}
 }
@@ -992,15 +1025,7 @@ func main() {
 			log.Println("Something went wrong while marshaling friend_request_update: ", marshalErr)
 			return
 		}
-		for key, value := range mainHub.connections {
-			if value.username == username {
-
-				if err := value.SafeWrite(websocket.TextMessage, payload); err != nil {
-					log.Println("Something bad happened: ", err)
-					delete(mainHub.connections, key)
-				}
-			}
-		}
+		mainHub.SendToUser(username, websocket.TextMessage, payload)
 	})))
 
 	http.Handle("/", http.FileServer(http.Dir("static")))
