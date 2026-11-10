@@ -43,9 +43,10 @@ type ChatMember struct {
 }
 
 type ClientConn struct {
-	conn     *websocket.Conn
-	username string
-	mu       sync.Mutex
+	conn      *websocket.Conn
+	username  string
+	rateLimit *rate.Limiter
+	mu        sync.Mutex
 }
 
 type WsMessage struct {
@@ -106,15 +107,20 @@ type visitor struct {
 	lastSeen time.Time
 }
 
+type visitorKey struct {
+	ip          string
+	limiterType string
+}
+
 var (
-	visitors   = make(map[string]*visitor)
+	visitors   = make(map[visitorKey]*visitor)
 	visitorsMu sync.Mutex
 )
 
-func rateLimitMiddleware(r rate.Limit, b int, next http.HandlerFunc) http.HandlerFunc {
+func rateLimitMiddleware(r rate.Limit, b int, next http.HandlerFunc, limiterType string) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		ip := clientIP(req)
-		limiter := getVisitor(ip, r, b)
+		limiter := getVisitor(ip, r, b, limiterType)
 		if !limiter.Allow() {
 			w.WriteHeader(http.StatusTooManyRequests)
 			return
@@ -123,14 +129,14 @@ func rateLimitMiddleware(r rate.Limit, b int, next http.HandlerFunc) http.Handle
 	}
 }
 
-func getVisitor(ip string, r rate.Limit, b int) *rate.Limiter {
+func getVisitor(ip string, r rate.Limit, b int, limiterType string) *rate.Limiter {
 	visitorsMu.Lock()
 	defer visitorsMu.Unlock()
 
-	v, exists := visitors[ip]
+	v, exists := visitors[visitorKey{ip: ip, limiterType: limiterType}]
 	if !exists {
 		limiter := rate.NewLimiter(r, b)
-		visitors[ip] = &visitor{limiter: limiter, lastSeen: time.Now()}
+		visitors[visitorKey{ip: ip, limiterType: limiterType}] = &visitor{limiter: limiter, lastSeen: time.Now()}
 		return limiter
 	}
 	v.lastSeen = time.Now()
@@ -190,12 +196,10 @@ func userIsInChat(ctx context.Context, username string, chatId int) (bool, error
 	return exists, nil
 }
 
-func (h *Hub) Add(name *websocket.Conn, username string) *ClientConn {
+func (h *Hub) Add(clientConn *ClientConn) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	clientConn := &ClientConn{conn: name, username: username}
-	h.connections[name] = clientConn
-	return clientConn
+	h.connections[clientConn.conn] = clientConn
 }
 
 func (h *Hub) Remove(name *websocket.Conn) {
@@ -395,7 +399,7 @@ func main() {
 			return
 		}
 		var userConn *ClientConn
-		userConn = &ClientConn{conn: conn, username: usernameVal}
+		userConn = &ClientConn{conn: conn, username: usernameVal, rateLimit: rate.NewLimiter(rate.Limit(5), 10)}
 		connSuccesfull, mrshlerr := json.Marshal(WsMessage{Type: "auth_success", Content: "Authentication successful"})
 		if mrshlerr != nil {
 			log.Println("Error marshalling auth_success message:", mrshlerr)
@@ -438,7 +442,7 @@ func main() {
 				}
 			}
 		}()
-		currentConn := mainHub.Add(conn, usernameVal)
+		mainHub.Add(userConn)
 		defer mainHub.Remove(conn)
 
 		for {
@@ -447,6 +451,11 @@ func main() {
 			if errorCatch != nil {
 				log.Println("The error occured: ", errorCatch)
 				return
+			}
+			allowance := userConn.rateLimit.Allow()
+			if allowance == false {
+				log.Println("Rate limit exceeded")
+				continue
 			}
 			if MarshalErr := json.Unmarshal(message, &req); MarshalErr != nil {
 				log.Println("Something went wrong during unmarshalling: ", MarshalErr)
@@ -459,7 +468,7 @@ func main() {
 					log.Println("Something went wrong when marshalling error message: ", err)
 					return
 				}
-				currentConn.SafeWrite(1, errorMsg)
+				userConn.SafeWrite(1, errorMsg)
 				continue
 			}
 			member, memErr := userIsInChat(context.Background(), usernameVal, req.ChatId)
@@ -483,7 +492,7 @@ func main() {
 			jsonMsg, _ := json.Marshal(WsMessage{Type: "message", Content: req.Message, Sender: usernameVal, ChatId: req.ChatId})
 			mainHub.Broadcast(typ, jsonMsg, req.ChatId)
 		}
-	}))
+	}, "websocket"))
 	http.HandleFunc("/register", rateLimitMiddleware(2, 10, recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		var req RegisterRequest
 		err := json.NewDecoder(r.Body).Decode(&req)
@@ -513,8 +522,8 @@ func main() {
 			return
 		}
 		w.WriteHeader(http.StatusCreated)
-	})))
-	http.HandleFunc("/login", rateLimitMiddleware(3, 15, recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	}), "auth"))
+	http.HandleFunc("/login", rateLimitMiddleware(2, 10, recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		var req LoginRequest
 		err := json.NewDecoder(r.Body).Decode(&req)
 		if err != nil {
@@ -552,8 +561,8 @@ func main() {
 			return
 		}
 		w.Write([]byte(tok))
-	})))
-	http.HandleFunc("/chats", rateLimitMiddleware(3, 10, recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	}), "auth"))
+	http.HandleFunc("/chats", rateLimitMiddleware(2, 5, recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		var req GroupChatCreationRequest
 		err := json.NewDecoder(r.Body).Decode(&req)
 		if err != nil {
@@ -616,8 +625,8 @@ func main() {
 		}
 		mainHub.SendToEveryone(1, jsonMsg)
 
-	})))
-	http.HandleFunc("/messages", rateLimitMiddleware(5, 15, recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	}), "write"))
+	http.HandleFunc("/messages", rateLimitMiddleware(5, 20, recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		var claims jwt.MapClaims
 		token := r.Header.Get("Authorization")
 		token = strings.TrimPrefix(token, "Bearer ")
@@ -688,8 +697,8 @@ func main() {
 		slices.Reverse(messagesArray)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(messagesArray)
-	})))
-	http.HandleFunc("/getchats", rateLimitMiddleware(5, 15, recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	}), "read"))
+	http.HandleFunc("/getchats", rateLimitMiddleware(5, 20, recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		var claims jwt.MapClaims
 		token := r.Header.Get("Authorization")
 		token = strings.TrimPrefix(token, "Bearer ")
@@ -726,7 +735,7 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(idArr)
 
-	})))
+	}), "read"))
 	http.HandleFunc("/addToChat", rateLimitMiddleware(2, 5, recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		var req AddToChatRequest
 		err := json.NewDecoder(r.Body).Decode(&req)
@@ -780,7 +789,7 @@ func main() {
 		}
 		jsonMsg, _ := json.Marshal(WsMessage{Type: "chat_update"})
 		mainHub.SendToEveryone(1, jsonMsg)
-	})))
+	}), "write"))
 	http.HandleFunc("/removeFromChat", rateLimitMiddleware(2, 5, recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		var req RemoveFromChatRequest
 		err := json.NewDecoder(r.Body).Decode(&req)
@@ -842,7 +851,7 @@ func main() {
 		}
 		jsonMsg, _ := json.Marshal(WsMessage{Type: "chat_update"})
 		mainHub.SendToEveryone(1, jsonMsg)
-	})))
+	}), "write"))
 
 	http.HandleFunc("/members", rateLimitMiddleware(5, 20, recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		chatId, intErr := strconv.Atoi(r.URL.Query().Get("chat_id"))
@@ -901,7 +910,7 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(memberArray)
 
-	})))
+	}), "read"))
 	http.HandleFunc("/friendRequest", rateLimitMiddleware(2, 5, recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		var claims jwt.MapClaims
 		token := r.Header.Get("Authorization")
@@ -964,8 +973,8 @@ func main() {
 			json.NewEncoder(w).Encode(friend)
 		}
 
-	})))
-	http.HandleFunc("/friendsList", rateLimitMiddleware(2, 5, recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	}), "write"))
+	http.HandleFunc("/friendsList", rateLimitMiddleware(5, 20, recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		var claims jwt.MapClaims
 		token := r.Header.Get("Authorization")
 		token = strings.TrimPrefix(token, "Bearer ")
@@ -1022,7 +1031,7 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(friendsArr)
 		defer friendsList.Close()
-	})))
+	}), "read"))
 	http.HandleFunc("/friendsChangeStatus", rateLimitMiddleware(2, 5, recoverMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		var claims jwt.MapClaims
 		token := r.Header.Get("Authorization")
@@ -1089,7 +1098,7 @@ func main() {
 			return
 		}
 		mainHub.SendToUser(username, websocket.TextMessage, payload)
-	})))
+	}), "write"))
 
 	http.Handle("/", http.FileServer(http.Dir("static")))
 	srv := http.Server{
