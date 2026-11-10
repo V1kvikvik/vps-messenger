@@ -167,13 +167,9 @@ func clientIP(r *http.Request) string {
 	return host
 }
 
-// Не забудь изменить перед запуском!!!
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  2048,
 	WriteBufferSize: 2048,
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
 }
 var dbpool, err = pgxpool.New(context.Background(), connStr)
 var secretKey = []byte(os.Getenv("SECRET_KEY"))
