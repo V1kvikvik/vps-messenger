@@ -1,7 +1,7 @@
 A small self-hosted messenger. It has a Go backend, real-time group chats over WebSockets and PostgreSQL storage, and it is built to run on a single VPS
 Features:
 • Account registration and login (bcrypt password hashing, HS256 JWT)
-• Group chats with owner / admin / member roles
+• Group chats with owner / member roles
 • Real-time messaging over WebSockets, with message history
 • Friend requests (send, accept, reject)
 • Per-IP rate limiting on every endpoint
