@@ -309,6 +309,10 @@ func (h *Hub) SendToEveryone(typ int, message []byte) {
 func (c *ClientConn) SafeWrite(typ int, message []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	err := c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	if err != nil {
+		return err
+	}
 	possibleErr := c.conn.WriteMessage(typ, message)
 	if possibleErr != nil {
 		return possibleErr
@@ -344,7 +348,9 @@ func main() {
 			log.Println("The error occured: ", err)
 			return
 		}
+		conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 		conn.SetReadLimit(16384)
+
 		defer func() {
 			if rec := recover(); rec != nil {
 				log.Println("Recovered from panic in WS handler:", rec)
@@ -367,6 +373,10 @@ func main() {
 		}, jwt.WithValidMethods([]string{"HS256"}))
 		if tokerr != nil {
 			log.Println("Something went during the token check: ", tokerr)
+			errControl := conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(4001, "Authentication failed"), time.Now().Add(10*time.Second))
+			if errControl != nil {
+				log.Println("Error sending close message:", errControl)
+			}
 			return
 		}
 
@@ -383,7 +393,55 @@ func main() {
 			log.Println("User not found in DB:", scanErr)
 			return
 		}
+		errDeadline := conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		if errDeadline != nil {
+			log.Println("SetReadDeadline error:", errDeadline)
+			return
+		}
+		var userConn *ClientConn
+		userConn = &ClientConn{conn: conn, username: usernameVal}
+		connSuccesfull, mrshlerr := json.Marshal(WsMessage{Type: "auth_success", Content: "Authentication successful"})
+		if mrshlerr != nil {
+			log.Println("Error marshalling auth_success message:", mrshlerr)
+			return
+		}
+		sfwrterr := userConn.SafeWrite(1, connSuccesfull)
+		if sfwrterr != nil {
+			log.Println("Error sending auth_success message:", sfwrterr)
+			errControl := conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(1011, "Authentication failed"), time.Now().Add(10*time.Second))
+			if errControl != nil {
+				log.Println("Error sending close message:", errControl)
+			}
+			return
+		}
 
+		var ping = time.NewTicker(time.Second * 30)
+		var done = make(chan struct{})
+		defer close(done)
+		conn.SetPongHandler(func(appData string) error {
+			err := conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+			if err != nil {
+				log.Println("SetReadDeadline error:", err)
+				return err
+			}
+			return nil
+		})
+		go func() {
+			defer ping.Stop()
+			for {
+				select {
+				case <-ping.C:
+					err := conn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(10*time.Second))
+					if err != nil {
+						log.Println("Ping error:", err)
+						conn.Close()
+						return
+					}
+				case <-done:
+					return
+				}
+			}
+		}()
 		currentConn := mainHub.Add(conn, usernameVal)
 		defer mainHub.Remove(conn)
 
@@ -956,7 +1014,7 @@ func main() {
 			return
 		}
 
-		var friendsArr []Friend
+		friendsArr := make([]Friend, 0)
 		for friendsList.Next() {
 			var friend Friend
 			if err := friendsList.Scan(&friend.Requester, &friend.Addressee, &friend.Status); err != nil {
@@ -1038,6 +1096,15 @@ func main() {
 	})))
 
 	http.Handle("/", http.FileServer(http.Dir("static")))
-	http.ListenAndServe(":8080", nil)
+	srv := http.Server{
+		Addr:              "127.0.0.1:8080",
+		Handler:           nil,
+		ReadHeaderTimeout: 5 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+	errListen := srv.ListenAndServe()
+	if errListen != nil {
+		log.Fatal("ListenAndServe: ", errListen)
+	}
 
 }

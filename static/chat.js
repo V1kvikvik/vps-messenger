@@ -12,7 +12,17 @@ const chatsList = document.querySelector('#chatsList')
 var currentChatSelectionMode = 'FriendList'
 
 let ws
+
+function resetTimer(){
+    reconnectTimer = null
+    connectWS()
+}
+
 function connectWS() {
+    if (typeof ws !== 'undefined' && ws !== null && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        console.log('WebSocket is already open.')
+        return
+    }
     ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws')
     ws.onopen = () => ws.send(token)
     ws.addEventListener("message", (event) => {
@@ -39,17 +49,41 @@ function connectWS() {
             AvailableChats()
         } else if(data.type == "friend_request_update"){
             GetFriendList()
+        } else if(data.type == "auth_success"){
+            console.log("WebSocket authentication successful")
+            connectingTries = 0
+            clearTimeout(reconnectTimer)
+            reconnectTimer = null
         }
     })
     ws.onclose = (event) => {
-        console.log('WS closed, reconnecting in 2s...', event.code, event.reason)
-        setTimeout(connectWS, 2000)
+        if (event.code !== 4001 && event.code !== 1000) {
+            connectingTries++
+            if (connectingTries > 5) {
+                console.log(`WS closed, reconnecting in ${Math.pow(2, 5) * 1000}ms...`, event.code, event.reason)
+                if (!reconnectTimer) {
+                    reconnectTimer = setTimeout(resetTimer, Math.pow(2, 5) * 1000)
+                }
+            } else {
+                console.log(`WS closed, reconnecting in ${Math.pow(2, connectingTries) * 1000}ms...`, event.code, event.reason)
+                if (!reconnectTimer) {
+                    reconnectTimer = setTimeout(resetTimer, Math.pow(2, connectingTries) * 1000)
+                }
+            }
+        } else if (event.code === 1000) {
+            console.log('WS closed normally')   
+        } else {
+            console.log('JWT authorization error')
+            localStorage.removeItem('token')
+            window.location.href = '/index.html'
+        }
     }
     ws.onerror = (err) => {
         console.log('WS error:', err)
     }
 }
-
+var connectingTries = 0
+var reconnectTimer = null; 
 
 function Send(){
     const messageInput = document.querySelector('#messageText')
