@@ -374,6 +374,7 @@ func main() {
 		if tokerr != nil {
 			log.Println("Something went during the token check: ", tokerr)
 			errControl := conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(4001, "Authentication failed"), time.Now().Add(10*time.Second))
+			conn.Close()
 			if errControl != nil {
 				log.Println("Error sending close message:", errControl)
 			}
@@ -415,8 +416,39 @@ func main() {
 			return
 		}
 
-		var ping = time.NewTicker(time.Second * 30)
+		var expiration, expErr = claims.GetExpirationTime()
+		if expErr != nil || expiration == nil {
+			log.Println("There is no valid expiration time for a token")
+			return
+		}
+		expirationDuration := time.Until(expiration.Time)
+		if expirationDuration <= 0 {
+			log.Println("Token has expired")
+			errControl := conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(4001, "Token has expired"), time.Now().Add(10*time.Second))
+			if errControl != nil {
+				log.Println("Error sending close message:", errControl)
+			}
+			return
+		}
 		var done = make(chan struct{})
+		var expirationTimer = time.NewTimer(expirationDuration)
+		go func() {
+			select {
+			case <-expirationTimer.C:
+				log.Println("JWT expiration timer fired")
+				errControlExp := conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(4001, "Token has expired"), time.Now().Add(10*time.Second))
+				conn.Close()
+				if errControlExp != nil {
+					log.Println("Something went wrong during websocket close-frame sending in expiration goroutine", errControlExp)
+				}
+				return
+			case <-done:
+				return
+			}
+		}()
+		defer expirationTimer.Stop()
+		var ping = time.NewTicker(time.Second * 30)
+
 		defer close(done)
 		conn.SetPongHandler(func(appData string) error {
 			err := conn.SetReadDeadline(time.Now().Add(60 * time.Second))
@@ -551,7 +583,7 @@ func main() {
 		}
 		claims := jwt.MapClaims{
 			"username": req.Username,
-			"exp":      time.Now().Add(24 * time.Hour).Unix(),
+			"exp":      time.Now().Add(15 * time.Second).Unix(),
 		}
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 		tok, tokerr := token.SignedString([]byte(secretKey))

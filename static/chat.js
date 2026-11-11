@@ -1,7 +1,7 @@
 var currentChat = {'id':0, 'object':null}
 var previousChat = {'id':0, 'object':null}
 var friends = []
-const token = localStorage.getItem('token')
+var token = localStorage.getItem('token')
 if(!token){
     window.location.href = '/index.html'
 }
@@ -19,13 +19,17 @@ function resetTimer(){
 }
 
 function connectWS() {
+    const token = localStorage.getItem('token')
+    if (!token) return
     if (typeof ws !== 'undefined' && ws !== null && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
         console.log('WebSocket is already open.')
         return
     }
     ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws')
-    ws.onopen = () => ws.send(token)
-    ws.addEventListener("message", (event) => {
+    const connection = ws
+    connection.onopen = () => connection.send(token)
+    connection.addEventListener("message", (event) => {
+        if (ws !== connection) return
         const data = JSON.parse(event.data)
         console.log(data)
         if(data.type == "message" && typeof currentChat !== 'undefined' && currentChat !== null && data.chat_id == currentChat['id']){
@@ -56,7 +60,8 @@ function connectWS() {
             reconnectTimer = null
         }
     })
-    ws.onclose = (event) => {
+    connection.onclose = (event) => {
+        if (ws !== connection) return
         if (event.code !== 4001 && event.code !== 1000) {
             connectingTries++
             if (connectingTries > 5) {
@@ -75,6 +80,7 @@ function connectWS() {
         } else {
             console.log('JWT authorization error')
             localStorage.removeItem('token')
+            clearTimeout(reconnectTimer)
             window.location.href = '/index.html'
         }
     }
@@ -86,6 +92,7 @@ var connectingTries = 0
 var reconnectTimer = null; 
 
 function Send(){
+    if (!ws || ws.readyState !== WebSocket.OPEN) return
     const messageInput = document.querySelector('#messageText')
     const value = messageInput.value
     if (value.trim() === '') return
